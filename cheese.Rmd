@@ -1,0 +1,148 @@
+---
+title: "Cheese"
+author: "Valèria Caro"
+date: "3/12/2021"
+output: html_document
+---
+```{r}
+setwd("~/Dades/Segon/PiE2/Estadistica")
+library(survival)
+library(Formula)
+library(colorspace)
+library(ggplot2)
+library(carData)
+library(Hmisc)
+library(car)
+library(tables)
+library(lattice)
+library(grid)
+library(gridExtra)
+library(MASS)
+library(latticeExtra)
+library(RColorBrewer)
+library(multcompView)
+library(mvtnorm)
+library(emmeans)
+library(RcmdrMisc)
+library(multcomp)
+cheese<-read.csv2("formatges.csv")
+(cheese)
+dim(cheese)
+```
+As it can be seen, there are a total of 16 observations for each one of the milk types. For a given type of milk, one has four observations for each combination of thermic treatment ( 2 levels) and CaC12 additive (2 levels). (We will only work with cow data; if we wanted to analyze data from all kind of animals we would use a three-way Anova)
+To confirm that we compute the following table:
+```{r}
+tabular((VACA+CABRA+OVELLA)*(TERMIC+1)~(CaCl2+1)*(n=1),cheese)
+```
+Let us start by doing the descriptive statistics:
+```{r}
+tabular((VACA+CABRA+OVELLA)*(TERMIC+1)~(CaCl2+1)*mean,cheese)
+```
+Looking at the means table we see that:
+  1) For each one of the milks, if the additive is present, the rendibility is smaller, independent of if the     milk is pasteurized or plane.
+  2) For COW milk, to use pasteurized milk reduces the rendibility, for the other milk types it is the other
+    way around.
+```{r}
+tabular((VACA+CABRA+OVELLA)*(TERMIC)~(CaCl2)*sd,cheese)
+```
+Looking at the standard deviation table we see that for the SHEEP and plane milk, there is a large difference
+between the sds of the additive/not additive groups.
+```{r}
+with(cheese, plotMeans(VACA, TERMIC, CaCl2, error.bars="conf.int", level=0.95, connect=TRUE))
+```
+Si ens limitem a la llet crua, veiem que els intervals de confiança no es solapen; sembla que sí que hi hagi diferència. En canvi, amb la llet pasteuritzada, es solapen i, per tant, sembla q és indiferent.
+```{r}
+with(cheese, plotMeans(VACA, CaCl2, TERMIC, error.bars="conf.int", level=0.95, connect=TRUE))
+```
+### COW milk analysis
+We first compute the means table:
+```{r}
+tabular(TERMIC~VACA*CaCl2*mean,cheese)
+```
+We now fit a linear model: TWO-WAY ANOVA with interaction:
+```{r}
+mcow<-lm(VACA~TERMIC*CaCl2,cheese)
+summary(mcow)
+```
+Veiem que Baseline és la casella crua i CaCl2. Passar a pasteuritzada és significativament diferent de zero. Passar a pasteuritzada sense CaCl2 també és significativament diferent de zero.
+Per tant, tenim gamma11 = 0, gamma12=0, gamma21=0, amb alfa1=0 i beta1=0. Llavors, el rendiment esperat de la casella (1,1) és 39.8. Rendiment esperat casella (1,2) és 39.8 + 18.76; etc.
+
+In this model we see thath the thermic treatment is significative and also it is the interaction within termic treatment and CaC12. Factor CaC12 is not significant. The two-way model with interaction explains 77% of the variability observed in the rendibility. The null hypothesis of the omnibus test is rejected, meaning that the two factors considered explain an important part of the variability explained in the rendibility.
+```{r}
+anova(mcow)
+```
+La variable termic la podriem treure si volguessim.
+```{r}
+Anova(mcow,t=3)
+```
+In the anova table appears the Thermic factor as not significative and the factor CaC12 as significative. The
+interaction also truns out to be significative. Nevertheless, these conclusions depend on the order in which
+the factors are included in the model. That’s why the type III sums of squares are computed with the Anova
+sentence, since these are independent of the order. The results of the Anova tells us that the main effect of
+CaC12 is not significative while the thermic and interaction components are significant. This is coherent with the summary of the model that has been obtained.
+In what follows let us compare the means of the rendibility by the Tukey method. Given that there is
+interaction, the results obtained for a given factor will depend on the level of the other factor.
+```{r}
+cld(emmeans(mcow,~TERMIC|CaCl2),Letters=letters,reversed=T)
+```
+Hem fet mira per nivells suposant que CaCl2 és conegut; així fixem les columnes.
+El rendiment si no hi ha CaCl2 sí que canvia; el rendiment de la crua sense CaCl2 és més alt.
+
+Ara fem el test al revés:
+```{r}
+cld(emmeans(mcow,~CaCl2|TERMIC),Letters=letters,reversed=T)
+```
+Veiem que per la pasteuritzada podem posar additiu o no; per la crua és miññpr no posar-ne.
+
+Here we see that:
+1) If CaC12 is no (no additive in the milk), there are differences in rendibility due to the milk. If CaC12 is
+yes, then the rendibility of the two milks are not statistically different.
+2) If we decide to use pasteurized milk, then we do not have to worry about the additive, because the
+rendibility is statistically the same.
+3) If we decide to use plane milk, then we will obtain a larger rendibility if Cac12 is not present.
+Next table summarizes the results obtained previously.
+(No fixem ni cua ni columna; és més correcte lo d'abans)
+Detecta 3 grups.
+```{r}
+cld(emmeans(mcow,~TERMIC*CaCl2),Letters=letters,reversed=T)
+```
+Observe in what follows that if we do not fix the level of one factor previously to perform the comparison, R will warning us about the presence of interaction that we are not taking into account.
+```{r}
+cld(emmeans(mcow,~CaCl2),Letters=letters,reversed=T)
+```
+```{r}
+cld(emmeans(mcow,~TERMIC),Letters=letters,reversed=T)
+```
+In what follows it appears the predicted rendibility obtained with our model jointtly with the confidence
+intervals for the predicted means.
+```{r}
+(emmip(mcow,TERMIC~CaCl2,CIs=TRUE))
+```
+```{r}
+(emmip(mcow,CaCl2~TERMIC,CIs=TRUE))
+```
+### In what follows we perform the residual analysis
+In order to see if we can accept the hypothesis of the linear model, we perform the residual analysis.
+```{r}
+plot(predict(mcow),resid(mcow))
+abline(h=0,lty=2)
+```
+```{r}
+plot(1:16,rstudent(mcow))
+abline(h=c(-2,0,2),lty=2)
+```
+```{r}
+oldpar <- par( mfrow=c(2,2))
+plot(mcow,ask=F)
+```
+```{r}
+par(oldpar)
+```
+
+We have four predicted values, one for each cell 8combination of thermic and CaC12). In the residual versus
+predicted plot we do not observe any pattern and we clearly see thath the residual variance is approximatly
+the same in each cell, so the homocedasticity property seems to be correct.
+The studentized residuals also do not show any pattern, and observations with big studentized residuals are
+not observed.
+In the four in one plot we see that the Normality may also be assumed, since the qq-plot is quite linear. also the independence may be assumed since no patterns are observed.
+

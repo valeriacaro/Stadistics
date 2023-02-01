@@ -1,0 +1,230 @@
+---
+title: "Preliminars"
+author: "Valèria Caro"
+date: "6/1/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# ESTIMACIÓ DE PARÀMETRES
+
+## MÈTODE DE MOMENTS
+
+Per estimar _k_ paràmetres, igualem els primers _k_ moments poblacionals i mostrals:
+
+$$
+\mu_k = m_k
+$$
+
+La banda esquerra depèn dels paràmetres de la distribució; és el valor teòric. La banda dreta es pot calcular amb les dades. L'estimador del mètode de moments és la solució del sistema.
+Normalment s'agafa $\mu_1 = E(X)$ i $\mu_2 = Var(X)$.
+
+## MÈTODE DE MÀXIM VEROSÍMIL
+
+L'estimador del màxim verosímil és el valor del paràmetre que maximitza la versemblança de la mostra observada. Per una distribució discreta, per maximitzar-ho, considerem els punts crítics prenent derivades respecte tots els paràmetres desconeguts i igualant-les a zero. Primer cal prendre logarítmes.
+
+# DISTRIBUCIONS RELACIONADES AMB LA NORMAL
+
+## DISTRIBUCIÓ NORMAL
+
+Comandes importants a R:
+
+* Densitat normal: funció de densitat de probabilitat
+```{r}
+# dnorm(x, mean, sd)
+```
+
+* Distribució normal: ens dona la probabilitat acumulada sota un valor (probabilitat que X prengui un valor inferior o igual al demanat)
+```{r}
+# pnorm(x, mean, sd, lower.tail = TRUE)
+```
+
+* Funció quantil de la distribució normal (quin valor acumula per sota seu la probabilitat p)
+```{r}
+# qnorm(p, mean, sd, lower.tail = TRUE)
+```
+
+* Generació de n nombres pseudoaleatoris normals
+```{r}
+# rnorm(n, mean, sd)
+```
+
+## DISTRIBUCIÓ CHI-QUADRAT
+
+Siguin $z_1, z_2, ... z_n$ variables aleatòries idènticament distribuïdes tal que $Z_i \sim N(0,1)$. Llavors es compleix que $z_1^2 + ... + z_n^2$ segueix una $X_n^2$.
+
+* Si n creix, la distribució chi tendeix a la normal.
+
+* Sigui $Y \sim X_n^2$, llavors $E(Y) = n$ i $Var(Y) = 2n$.
+
+Es compleix que si $Y \sim N(\mu, \sigma^2)$ i $y_1, ..., y_n$ és una mostra de Y:
+
+$$
+(n-1) \frac{s^2}{\sigma^2} \sim X_{n-1}^2
+$$
+
+Comandes en R:
+
+```{r}
+# rchisq(500,50) # Genera nombres aleatoris
+```
+
+```{r}
+pchisq(7.3,15,lower.tail = TRUE) # probabilitat per sota de 7.3. pchisq(value, degrees of freedom, if lower.tail P(X<=x))
+```
+
+```{r}
+qchisq(0.8,15,lower.tail = TRUE) # busca el punt que acumula una cua per sota igual a 0.8
+```
+
+## DISTRIBUCIÓ T-STUDENT
+
+Sigui $Z \sim N(0, 1)$, $Y \sim X_n^2$ i independents:
+
+$$
+\frac{Z}{\sqrt{Y/n}} \sim t_n
+$$
+
+* Pren valors a tot R i és simètrica.
+
+* Si n creix, tendeix a la normal.
+
+* Sigui T que segueix la distribució, $E(T) = 0$, $Var(T) = n/(n-2)$
+
+També:
+
+$$
+\frac{\hat{y} - \mu}{s/\sqrt{n}} \sim t_{n-1}
+$$
+
+En cas de coneixer $s = \sigma$, segueix una normal (0, 1).
+
+Comandes de R:
+
+```{r}
+# rt(100, 13) # Nombres aleatoris (n, graus llibertat)
+```
+
+```{r}
+pt(3.5, 8) # Retorna resultats de la funció de distribució acumulada. (probabilitat sota el valor de 3.5)
+```
+
+```{r}
+qt(0.8,8) # Retorna resultats dels quantils de la t-Student (valor que té per sota un 0.8 de probabilitat)
+```
+
+```{r}
+# t.test(mostra1, sigma.x = sigma1) 
+```
+
+## DISTRIBUCIÓ F-FISHER
+
+Sigui $Y_1 \sim X_{n_1}^2$ i $Y_2 \sim X_{n_2}^2$ independents:
+
+$$
+\frac{Y_1/ n_1}{Y_2/n_2} \sim F_{n_1, n_2}
+$$
+
+* Si Y segueix la distribució, $E(Y) = n_2/(n_2 - 2)$ i $Var(Y) = (2n_2^2(n_1+n_2-2))/(n_1(n_2-2)^2(n_2-4))$
+
+* $F_{\alpha, n_1, n_2} = 1/F_{1-\alpha, n_2, n_1}$
+
+També:
+
+$$
+\frac{s_1^2/\sigma_1^2}{s_2^2/\sigma_2^2} \sim F_{n_1-1, n_2-1}
+$$
+
+Comandes a R:
+
+```{r}
+#rf(100, 3,6) # Dades aleatories d'una F de fisher
+```
+
+
+```{r}
+pf(3.5, 8,5) #pf(valor, graus llibertat 1, graus llibertat 2). Probabilitat sota 3.5
+```
+
+```{r}
+qf(0.8,8,8,5) #qf(valor, graus llibertat 1, graus llibertat 2, paràmetre de no centralitat) Valor amb probabilitat 0.8 sota seu.
+```
+
+```{r}
+# qf(0.05,5,10) = (qf(0.95,10,5))^(-1)
+```
+
+# INTERVALS DE CONFIANÇA
+
+## INTERVAL DE CONFIANÇA PER MITJANA POBLACIONAL, SIGMA CONEGUDA
+
+$$
+\hat{x} +- z_{\alpha/2}\frac{\sigma}{\sqrt{n}}
+$$
+
+## INTERVAL DE CONFIANÇA PER DIFERÈNCIA DE MITJANES, SIGMA CONEGUDA
+
+$$
+\hat{x} - \hat{y} +- z_{\alpha/2}\sqrt{\frac{\sigma_x^2}{n}+\frac{\sigma_y^2}{m}}
+$$
+## INTERVAL DE CONFIANÇA PER PROPORCIONS, MOSTRES GRANS
+
+$$
+\hat{p} +- z_{\alpha/2}\sqrt{\frac{\hat{p}(1-\hat{p})}{n}}
+$$
+
+## INTERVAL DE CONFIANÇA PER DIFERÈNCIA DE PROPORCIONS, MOSTRES GRANS
+
+$$
+\hat{p_1} - \hat{p_2} +- z_{\alpha/2}\sqrt{\frac{\hat{p_1}(1-\hat{p_1})}{n} + \frac{\hat{p_2}(1-\hat{p_2})}{m}}
+$$
+
+## INTERVAL DE CONFIANÇA PER MITJANA POBLACIONAL, SIGMA DESCONEGUDA
+
+$$
+\hat{x} +- t_{\alpha/2, g}\frac{s}{\sqrt{n}}
+$$
+
+On:
+
+$$
+\text{graus de llibertat} = \text{tamany mostral} - \text{param. locals estimats}
+$$
+
+## INTERVALS DE CONFIANÇA PER DIFERÈNCIES DE VARIÀNCIES DIFERENTS
+
+S'utilitza una t-Student de:
+
+$$
+\nu = \frac{(\frac{S_1^2}{n_1} + \frac{S_2^2}{n_2})^2}{\frac{S_1^4}{n_1^2(n_1-1)}+\frac{S_2^4}{n_2^2(n_2-1)}} 
+$$
+
+graus de llibertat.
+
+# PROVES D'HIPÒTESI
+
+Els estadístics de test valen:
+
+$$
+Z = \frac{\text{estimacio amb dades} - \text{valor del test}}{\sqrt{Var(\text{estimacio amb dades})}}
+$$
+
+# PROVES AMB P-VALORS
+
+Per mirar si és inferior al valor donar:
+```{r}
+# p.valor <- (1-pt(estadistic, n-1))
+```
+
+Per mirar si és igual:
+```{r}
+# p.valor <- 2*(1-pt(estadistic, n1-1))
+```
+
+Per mirar que sigui mñes gran:
+```{r}
+# p.valor <- (pt(estadistic, n1-1))
+```

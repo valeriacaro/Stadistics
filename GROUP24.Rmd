@@ -1,0 +1,193 @@
+---
+title: "SEGON ENTREGABLE PIE2"
+author: "Grup 24: Valèria Caro Via i Pere Cornellà Franch"
+date: "12/20/2021"
+output: html_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(car)
+library(emmeans)
+library(tables)
+library(RcmdrMisc)
+library(multcomp)
+setwd("~/Dades/Segon/PiE2/Estadistica/Entregable")
+```
+
+#### (1)
+Llegim les dades i fem estadística descriptiva. Ens cal definir les variables categòriques com a factors i declarar una variable pel logarítme del nivell de vitamina C (més endavant es justificarà).
+```{r}
+dadesvitamina <-read.csv2("VitCGroup24.csv")
+dadesvitamina$LVitaminaC <- log(dadesvitamina$VitaminaC)
+dadesvitamina$FactorTractament <- as.factor(dadesvitamina$Tractament)
+dadesvitamina$FactorSetmana <- as.factor(dadesvitamina$Setmana)
+tabular((VitaminaC)*(FactorSetmana+1)~(FactorTractament+1)*(n=1), dadesvitamina)
+```
+
+Veiem que les dades consten de dues mesures dels nivells de vitamina C per a cada setmana (1:12) i tipus de tractament ('a',',b','c'). 
+
+Calculem les mitjanes del logaritme del nivell de vitamina C i les seves desviacions estàndard en funció de la setmana i el tractament:
+```{r}
+tabular(LVitaminaC*FactorSetmana ~ FactorTractament*(mean + sd), data = dadesvitamina)
+```
+
+Veiem que el nivell de vitamina C del tractament A sembla que disminueix menys a mesura que van passant les setmanes que el dels sucs tractats segons B i C. També veiem que les desviacions estàndard de les dades són bastants irregulars: algunes tenen una desviació estàndard molt gran i, altres, molt petita; això es pot deure a que només tenim dues mesures del nivell de vitamina per setmana i tractament i pot ser que aquestes mesures siguin properes en valor o molt allunyades.
+
+
+```{r}
+sp(LVitaminaC~Setmana|Tractament,smooth=F,dat=dadesvitamina)
+```
+
+Observem que els nivells de vitamina C inicials en tots els tractaments són semblants. També veiem que per a cada tractament els nivells de vitamina C disminueixen amb el pas del temps; tanmateix, el ritme de disminució de vitamina C pel tractament A és visualment bastant més lent que els ritmes del tractament B i C. Podria ser que el tractament A tingués un rendiment superior, entenent com rendiment la capacitat d'un tractament per a preservar, sense pèrdues molt grans, el nivell de vitamina a mesura que transcorren les setmanes.
+
+#### (2)
+Per ajustar un model lineal per a les nostres dades triem com a variable resposta el logaritme dels nivells de vitamina C mesurats per a cada tractament (seguint la indicació que apareix a continuació de la conversió prenent logarítmes de la fórmula donada) i com a variables explicatives el tractament i la setmana (de les quals tindrem en compte les interaccions necessàries). La variable tractament és de tipus categòric i la setmana és numèrica discreta.
+$$
+\text{VitaminaC}=\alpha_1e^{-\beta_i\cdot\text{setmana}}
+$$
+$$
+ln(\text{VitaminaC})=ln(\alpha_i) -\beta_i\cdot\text{setmana}
+$$
+
+#### (3)
+Considerem que, mitjançant les dades i el que hem observat, té sentit contestar les següents preguntes: 
+
+* És el model nul el que millor s'ajusta a les dades?
+
+* Els nivells de vitamina C inicialment presents en cada mostra de tractament són estadísticament iguals?
+
+* Les disminucions de la presència de vitamina C per unitat de setmana són estadísticament diferents per a els tres models o el tractament A té unes millors característiques de conservació respecte el B i el C?
+
+* Quant disminueix el nivell de vitamina C amb l'increment d'una unitat de setmana per a un tractament concret?
+
+#### (4.1)
+Si tots els paquets de suc ténen els mateixos nivells de vitamina C inicialment, aleshores podem assumir que $\alpha_a =\alpha_b =\alpha_c = \alpha$. Vist així, i atès que l'evolució del nivell de vitamina C en funció de les setmanes ve condicionada pel tipus de tractament, el model que només té en compte la interacció entre la setmana i el tractament (que explica la variable setmana condicionada a la variable tractament), ens serveix per a comprovar si estadísticament $\beta_a =\beta_b =\beta_c$:
+
+$$
+\log(\text{VitaminaC})=-\beta_i\cdot \text{setmana}+\log(\alpha)
+$$
+També es podria utilitzar el model amb _Corner Point Restrictions_ que pren com a _baseline_ el tractament A i, a partir d'aquest, mirar si $\beta_b$ i $\beta_c$ són estadísticament significatives. De totes maneres, a banda del model ens caldria realitzar un altre test, per exemple el de Tukey, ja que això només ens permetria comparar l'evolució dels logarítmes del nivell de vitamina C dels tractaments B i C amb l'A, i no el B i el C entre ells. Per aquest motiu, i com que volem obtenir les estimacions pels tres valors de $\hat{\beta_i}$, hem decidit agafar com a punt de partida el logarítme del nivell de vitamina C en el moment de l'envasat, que correspon al valor estimat $\hat{log(\alpha)}$, i així obtenir cada estimació de beta de manera directa a partir del model.
+
+Fem l'ajust:
+
+```{r}
+m1<-lm(LVitaminaC~Setmana:FactorTractament,dadesvitamina)
+summary(m1)
+Anova(m1,ty=3)
+```
+
+El resum del model i la taula ancova indiquen que la interacció considerada és significativa. A més, el model explica un 92.6% de la variabilitat del logaritme del nivell de vitamina C i el test omnibus clarament rebutja l'hipòtesis nul·la; el model utilitzat sembla millor que el model nul (el p-valor és menor que 0.05). Tanmateix, observem que  $\hat{\beta_b}\approx \hat{\beta_c}$ ($0.169471\approx0.158765$), és a dir, que els valors predits podríen ser estadísticament iguals. Ho podem comprovar de la següent manera:
+
+```{r}
+emm <- emmeans(m1,~FactorTractament|Setmana, at=list(Setmana=c(1,6,12)))
+cld(emm, alpha = 0.05)
+```
+
+Calculant les mijtanes i aplicant el mètode de Tukey, veiem que podem afirmar que $\hat{\beta_b}$ i $\hat{\beta_c}$ són equivalents estadísticament parlant.
+
+En resum, hem vist que els valors estimats de $\beta_i$ són:
+
+* $\hat{\beta_a} = 0.0989$
+
+* $\hat{\beta_b} = 0.1695$
+
+* $\hat{\beta_c} = 0.1588$
+
+Tanmateix, podem concloure que $\beta_a \neq\beta_b=\beta_c$ i que $\beta_b$ i $\beta_c$ són superiors que $\beta_a$; en augmentar en una unitat el valor de la setmana, el logarítme del nivell de vitamina disminueix més pels tractaments B i C que pel tractament A. En concret, pel tractament A disminueix en $0.0989$ unitats, mentre que pel B i el C es veu reduït en $0.1695$ i $0.1588$ unitats, respectivament.
+
+#### (4.2)
+Per a comprovar si en el moment de l'envasat (a la setmana 0) el nivell de vitamina C de tots els sucs era estadísticament igual, podem definir el següent model:
+
+$$
+\log(VitaminaC)=-\beta_i\cdot setmana+\log(\alpha)+\tau_i
+$$
+
+És el mateix model considerat anteriorment, però ara apliquem _Corner Point Restrictions_ sobre el terme independent: considerem el tractament A com a línia de base _(baseline)_ i, per tant, agafem $\tau_a = 0$. Llavors, el valor de $log(\alpha)$ ens donarà el nivell de vitamina C del suc recent envasat seguint el tractament A. Sabrem si el nivell de vitamina C de tots els sucs era el mateix a l'inici en funció de si $\hat{\tau}_b = \hat{\tau_c} = 0$, o no, estadísticament, éssent $\tau_b$ i $\tau_c$ petites perturbacions respecte la constant inicial per al tractament A donades pels tractament B i C, respectivament.
+
+```{r}
+m2<-lm(LVitaminaC~FactorTractament + Setmana:FactorTractament,dadesvitamina)
+summary(m2)
+Anova(m2, ty = 3)
+```
+
+Veiem que el model ara explica en un 92.9% la variabilitat del logarítme del nivell de vitamina, i altre cop és millor que el model nul: el test omnibus clarament rebutja la hipòtesis nul·la. A més, ens diu que $\hat{ln(\alpha)} = 3.845$, $\hat{\tau_b} = 0.159$ i $\hat{\tau_c} = 0.119$. Tanmateix, tant a través de la taula del model com la de l'ancova, veiem que la variable tractament, tant per B i C, no és significativa: estadísticament parlant el seu _t_-valor és igual a zero. Sembla que podrem considerar que, en el moment de l'envasat, el nivell de vitamina C pels tres tractaments era el mateix; ho comprovarem realitzant un nou test de Tukey avaluat a la setmana 0:
+
+```{r}
+cld(emmeans(m2,~FactorTractament|Setmana, at=list(Setmana=c(0))),reversed=T,alpha=0.05)
+```
+
+Veiem que, segons el mètode aplicat, el logarítme del nivell de vitamina C pels tres models és estadísticament el mateix a l'inici. Per tant, podem considerar $\tau_b = \tau_c = 0$.
+
+Finalment, podem predir quins eren els nivells de vitamina en el moment de l'envasat:
+
+```{r}
+newdata<-data.frame(Setmana=c(0), FactorTractament= c("a","b","c"))
+exp(predict(m2,newdata, interval="prediction",level=0.95))
+```
+
+Altra vegada, es comprova que el nivell de vitamina es pot considerar igual per a la setmana 0, ja que veiem que els intervals de confiança pel nivell inicial de vitamina C dels tres tractaments se solapen.
+
+#### (5)
+
+En el model anterior hem vist que podem assumir que al moment de ser envasats tots els sucs tenien el mateix nivell de vitamina C. Així doncs, podem tornar a considerar que $\alpha_a=\alpha_b=\alpha_c = \alpha$. Així doncs, sembla que el primer model ja era útil per explicar la variabilitat del logarítme del nivell de vitamina en termes de la setmana i el tractament. Tot i això, com que havíem deduït que $\beta_a \neq\beta_b=\beta_c$, per a veure de manera més clara com evoluciona el nivell de vitamina dels tractaments B i C respecte el tractament A, considerarem el model següent:
+
+$$
+\log(VitaminaC)=-(\beta +  \gamma_i) \cdot setmana+\log(\alpha)
+$$
+
+On aplicarem _Corner Point Restrictions_ sobre la pendent: considerarem el tractament A com a línia de base _(baseline)_ i, per tant, $\gamma_a = 0$. D'aquesta manera, $\beta$ ens dirà en quantes unitats disminueix el valor del logarítme del nivell de vitamina per al tractament A al augmentar en una unitat la setmana. Llavors, $\gamma_b$ i $\gamma_c$ seran petites perturbacions respecte $\beta$, que ens donaran en quant més que el tractament A fan el B i el C, respectivament, disminuir el logarítme del nivell de vitamina en funció de la setmana. Segons el primer model que hem ajustat, ens hauria de sortir que $\gamma_b = \gamma_c \neq 0$.
+
+```{r}
+m3<-lm(LVitaminaC~Setmana + Setmana:FactorTractament,dadesvitamina)
+summary(m3)
+Anova(m3, ty = 3)
+```
+
+Veiem que aquest model explica un 92.6% de la variabilitat del logarítme del nivell de vitamina i, a més, altra vegada és millor que el model nul: el test omnibus clarament rebutja la hipòtesi nul·la. A més, veiem que tots els coeficients considerats són estadísticament significatius; el seu _t_-valor és estadísticament diferent de zero. La variància dels residus del model segueix una _t_-student de 68 graus de llibertat i és de 0.15².
+
+A partir del model, podem concloure que el logarítme del nivell de vitamina C a l'inici (valor de $\hat{\alpha}$) és de $3.93$. Si augmentem en una unitat el valor de la setmana pel tractament A, la variable resposta disminueix en $0.098$ unitats (valor de $\hat{\beta}$; $-\hat{\beta} = -0.098$), mentre que per al tractament B disminueix en $0.098 + 0.071$ unitats ($\hat{\gamma_b} = 0.071$) i per al C es veu rebaixat $0.098 + 0.059$ unitats ($\hat{\gamma_c} = 0.059$).
+
+Comprovem que, tal com estem suposant, $\gamma_b =\gamma_c \neq 0$, és a dir, $\beta \neq \beta + \gamma_b = \beta + \gamma_c$. Utilitzem el mètode de Tukey i comprovem que això passa per cada setmana tret la primera, on només considerem $ln(\alpha)$ i no els paràmetres $\beta$ i $\gamma_i$ (considerem tots els valors enters en l'interval [0, 12]):
+
+```{r}
+cld(emmeans(m3,~FactorTractament|Setmana, at=list(Setmana=c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12))),reversed=T,alpha=0.05)
+```
+
+Efectivament, el test de Tukey agrupa, per cada setmana entre la primera i la dotzena, el tractament B i C en el mateix grup i A en un altre. En canvi, per a la setmana 0 ens diu que el logarítme del nivell de vitamina C és el mateix estadísticament parlant per als tres tractaments, tal com havíem assumit.
+
+Utilitzant aquest model, també podem predir quin nivell de vitamina C devien tenir tots els sucs en el moment de ser envasats. Com es pot veure a continuació, per cada tractament obtenim el mateix resultat, ja que és el que hem decidit considerar per a ajustar aquest model, donat que anteriorment hem vist que podíem assumir que tots eren estadísticament iguals:
+
+```{r}
+newdata<-data.frame(Setmana=c(0), FactorTractament= c("a","b","c"))
+exp(predict(m3,newdata, interval="prediction",level=0.95))
+```
+
+Finalment, fem l'anàlisi de residus del model:
+
+```{r}
+plot(predict(m3),resid(m3))
+abline(h=0,lty=2)
+```
+```{r}
+plot(1:72,rstudent(m3))
+abline(h=c(-2,0,2),lty=2)
+```
+
+```{r}
+oldpar<-par(mfrow=c(2,2))
+plot(m3,ask=F)
+par(oldpar)
+```
+
+Sembla que les hipòtesis d'homocedasticitat i normalitat es poden acceptar; en el gràfic de residus vs valors predits no veiem cap patró i en el Q-Q observem una relació força lineal. Tampoc observem valors amb _laverage_ ni distància de Cook massa grans. A més, en el gràfic de residus estudiantitzats, veiem que només dues dades queden fora l'interval (-2, 2), que és menys d'un 5% de totes les dades que tenim.
+
+### (6)
+
+En resum, podem dir que els resultats previstos de l’estudi descriptiu coincideixen amb els resultats obtinguts. Vist que el model final explica més d’un 90% de la variabilitat és palès que el model teòric proposat per l’enunciat es correspon amb les dades experimentals. 
+
+Amb els resultats del primer i tercer model deduïm que, a efectes del ritme de disminució de vitamina C, els tractaments B i C són equivalents i que, a més, provoquen pèrdues de quasi el doble que el tractament A del nivell de vitamina C per cada setmana. Doncs, com hem vist, $\hat{\beta} = 0.098$, $\hat{\beta}+\hat{\gamma_b} = 0.098+0.071 = 0.169$ i $\hat{\beta} + \hat{\gamma_c} = 0.098 + 0.059 = 0.157$.
+Això significa que, per cada augment de la setmana en una unitat, el logarítme del nivell de vitamina C dels sucs que han estat tractats amb el tractament A es veurà rebaixat 0.098 unitats, mentre que els manipulats segons B i C disminuiràn en 0.169 i 0.157 unitats, respectivament. Mirant-ho amb la fórmula exponencial, aquests valors impliquen que, per cada augment en una unitat de la setmana, el nivell de vitamina C es veu dividit per $e^{\beta + \gamma_i}$ (per a trobar el seu valor exacte per a cada tractament es consideren els paràmetres estimats respectius). Tanmateix, a la pràctica, si volem escollir el tractament amb rendiment més baix és indiferent optar pel B o el C, ja que estadísticament acaben sent equivalents; si el que volem és aconseguir el rendiment òptim clarament cal triar el tractament A.
+
+El segon model ens mostra que, inicialment, el nivell de vitamina C presents en tots els sucs, indiferenment de quin tractament se'ls hi ha aplicat, és el mateix. A l'hora de predir el valor de la variable resposta en la setmana 0, hem obtingut tres intervals de confiança que se solapaven entre ells, cosa que ens ha servit per acabar de decidir que els podíem considerar tots iguals i, així, ajustar el tercer model, amb el qual hem vist que l'interval de confiança aproximat pel valor inicial del nivell de vitamina és [37.08, 70.94] i 51.29 és el seu valor estimat.
+
+Finalment, hem conclòs que el tercer model és el més òptim dels considerats, tenint en compte que la variància dels residus del tercer model segueix una _t_-student de 68 graus de llibertat i és de 0.15² i que permet explicar un 92.6% de la variabilitat de la variable resposta, a més de complir les hipòtesis d'homocedasticitat i normalitat que requereix el model lineal. D'altra banda, aquest model ajusta millor que el model nul, ja que hem vist que el test omnibus clarament rebutja la hipòtesis nul·la. A més, a diferència del primer model, ens permet veure clarament la diferència entre els valors de $\hat{\beta_i}$, cosa que ens interessava.

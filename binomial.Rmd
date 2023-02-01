@@ -1,0 +1,298 @@
+---
+title: "binomial"
+author: "Valèria Caro"
+date: "17/12/2021"
+output: html_document
+---
+## INTRODUCCIÓ
+
+En aquest exercici, compararem el model lineal amb el model lineal generalitzat.
+
+Sigui:
+
+$Y \sim Bin(n, p)$ tal que $Y = 1$ si l'insecte mor i $Y = 0$ altrament.
+
+El model generalitzat (GLM) és:
+$$
+g(\mu) = \beta_0 + \beta_1 x_1 + ...
+$$
+Un model probit és:
+$$
+\phi^{-1}(p) = \beta_0 + ...
+$$
+On $\phi^{-1}$ és la inversa de la funció de distribució $N(0, 1)$.
+
+Un model logit (logístic) és:
+$$
+log(\frac{1}{1-p}) = \beta_0 + ...
+$$
+Un model complementari log-log (cloglog):
+$$
+log(1 - log(p)) = \beta_0 + ...
+$$
+Recordem que en una Binomial $E(Y) = np = \mu$.
+
+Si utilitzem un model lineal (LM), si:
+$$
+p_i = \beta_0 + \beta_1*dosi_i
+$$
+Cal fer les transformacions:
+$$
+p_i = \beta_0 + \beta_1*log(dosi_i)
+$$
+$$
+\mu = np_i = \hat{\beta_0} + \hat{\beta_1}*log(dosi_i)
+$$
+Carreguem les llibreries i les dades:
+```{r}
+setwd("~/Dades/Segon/PiE2/Estadistica")
+library(survival)
+library(Formula)
+library(colorspace)
+library(ggplot2)
+library(carData)
+library(Hmisc)
+library(car)
+library(tables)
+library(lattice)
+library(grid)
+library(gridExtra)
+library(MASS)
+library(latticeExtra)
+library(RColorBrewer)
+library(multcompView)
+library(mvtnorm)
+library(emmeans)
+library(RcmdrMisc)
+library(multcomp)
+insect <-read.csv2("insecticide.csv")
+head(insect)
+```
+
+```{r}
+dim(insect)
+```
+Aquest conjunt de dades consta de 10 files i 3 columnes. Cada fila correspon a un experiment diferent. En cada experiment, es van sotmetre diversos insectes a una dosi determinada d'insecticida i al cap d'un temps es va mesurar el nombre d'insectes que van morir. Les tres columnes contenen: el nivell de dosi, el nombre d'insectes que sotmesos a proves i el nombre d'insectes que van morir. 
+
+Només hi ha una variable explicativa que és el nivell de dosi i és contínua. La variable resposta és discreta i correspon al nombre de morts del nombre d'assaigs. Per tant, té sentit assumir la distribució binomial com a distribució de resposta. 
+
+Per cada dosi tenim una binomial. El nombre d'insectes sotmesos a proves (T) és la $n$ de la binomial i $p_i$ de la binomial és la probabilitat de morir si estàs sotmès a una determinada dosi $i$. Si observem una binomial per cada fila, estimem $p_i$ amb:
+
+$$
+\hat{p}_i = \frac{morts}{total}
+$$
+
+## ESTADÍSTICA DESCRIPTIVA
+
+Primer tracem la proporció de mort en funció del logaritme de la dosi. És molt comú que en experiments on es requereixen algunes dosis de tractament el model esdevingui lineal si es considera el log(dosi) en lloc de la dosi com a variable explicativa. 
+
+
+```{r}
+scatterplot(DIED/T~log(DOSE),smooth=F,boxplots=F,data=insect)
+```
+
+Al augmentar la dosi, es moren més insectes. Veiem una forma de S: al principi asímptota, llavors creix, i després assímptota. La regressió no capta aquesta S. (sinusoide)
+
+En segon lloc, tracem el valor que acumula una probabilitat igual a la proporció de morts per a una dosi donada en funció del log(dosi).
+Per cada probabilitat estimada, mirem quin punt acumula una probabilitat igual a l'inversa de la normal (0,1):
+```{r}
+scatterplot(qnorm(DIED/T)~log(DOSE),smooth=F,boxplots=F,data=insect[2:10,])
+# No utilitzem totes les dades perquè el primer és un zero i ens pot donar problemes a l'hora de calcular logarítmes.
+```
+
+Ara el model sembla més lineal. Veiem que després d'aplicar la qnorm els punts són coherents amb una recta. Per tant, té sentit ajustar un model probit (qnorm = $\phi^{-1}$).
+
+Prèviament, ajustem les dades mitjançant un model lineal que té com a variable de resposta la qnorm de proporció d'insectes morts.
+
+## AJUSTEM MODEL LINEAL
+```{r}
+m0<-lm(qnorm(DIED/T)~log(DOSE),data=insect[which(insect$DIED>0),])
+summary(m0)
+```
+Mirant R² veiem que expliquem 96% de la variabilitat. A més, el test és millor que el valor nul. Els coeficients de les variables són estadísticament significants.
+
+A continuació fem l'anàlisi de residus.
+
+## ANÀLISI DE RESIDUS
+
+```{r}
+plot(m0,which=1)
+```
+
+```{r}
+with(insect,plot(log(DOSE),DIED/T))
+with(insect[2:10,],lines(log(DOSE),pnorm(predict(m0))))
+```
+
+Els punts corresponen a les 10 probabilitats observades; la línia són les 9 predides amb el model lineal que hem pensat. Hem transformat altre cop per obtenir les probabilitats.
+
+La y no és la nostra resposta, és la phi a la menys u de p.
+
+```{r}
+plot(predict(m0),resid(m0))
+abline(h=0,lty=2)
+```
+
+Les prediccions són en l'escala de phi.
+
+Veiem que les prediccions del model són prou bones, però fent el plot dels residus vs els predicted veiem alguns patrons. Les hipòtesis del model lineal no se satisfan amb claredat. Per tant, no podem utilitzar aquest model.
+
+Observació: Aplicar un LM vol dir que assumim que $Y* = \phi^{-1}(p)$ és Normal.
+
+## MODEL LINEAL GENERALITZAT
+
+A partir d'aquí, considerarem que la variable resposta és distribuïda per una Binomial. Considerarem les funcions probit, logit i complementari log-log. Compararem els tres models en termes de bondat d'ajust. A partir d'ara, la hipòtesi d'homocedasticitat ja no és necessària. En el model GML ja podem incloure els 10 punts; no tenim problemes si la p és 0 o 1.
+
+### MODEL PROBIT
+
+```{r}
+m1<-glm(cbind(DIED,T-DIED)~log(DOSE),family=binomial(link="probit"),data=insect)
+summary(m1)
+# DIED: nombre d'èxits de la binomial
+# T-DIED: nombre fracassos de la binomial
+```
+Cal tenir en compte que els residus en aquests models es calculen diferent.
+
+El AIC (Criteri d'Informació d'Akaika) és una mesura de bondat d'ajust:
+
+$$
+AIC = -2l(\hat{\beta};y) + 2p
+$$
+On $p$ és el nombre de paràmetres del model i $l$ la funció del màxim versemblant. Donats dos models és millor el que té un AIC menor.
+
+El residual deviance diu com està de lluny el nostre model del model millor. La diferència entre el millor model i el pitjor (model nul) és 398. La diferència entre el millor model i el nostre és de 7.68. Per tant, sembla prou bo.
+
+Calculem l'estadístic de Pearson:
+```{r}
+PS<-sum(residuals(m1,type="pearson")^2)
+PS/m1$df.res
+```
+L'estadística de Pearson (suma dels quadrats dels residus de Pearson) dividida pels graus de llibertat dels residus hauria de ser propera a un. En cas contrari, és un signe de sobredispersió (més gran d'un) o infradispersió (menys d'un). 
+
+Fem l'anàlisi de residus:
+```{r}
+residualPlot(m1,smooth=F)
+```
+```{r}
+plot(log(insect$DOSE),insect$DIED/insect$T)
+lines(log(insect$DOSE),predict(m1,type="response"))
+```
+
+En aquest gràfic veiem que ara el model s'ajusta millor als punts.
+
+```{r}
+plot(log(insect$DOSE),resid(m1,type="pearson"))
+abline(h=0,lty=2)
+```
+```{r}
+pd<-(0:100)
+pih<-predict(m1,data.frame(DOSE=pd),type="response",se.fit=T)
+plot(insect$DOSE,insect$DIED/insect$T,ylim=c(0,1))
+lines(pd,pih$fit)
+lines(pd,pih$fit+1.96*pih$se,col="red")
+lines(pd,pih$fit-1.96*pih$se,col="red")
+abline(h=c(0,1),lty=2)
+```
+```{r}
+pd<-exp(seq(from=min(log(insect$DOSE)),to=max(log(insect$DOSE)),length.out = 50))
+pih<-predict(m1,data.frame(DOSE=pd),type="response",se.fit=T)
+plot(log(insect$DOSE),insect$DIED/insect$T,ylim=c(0,1))
+lines(log(pd),pih$fit)
+lines(log(pd),pih$fit+1.96*pih$se,col="red")
+lines(log(pd),pih$fit-1.96*pih$se,col="red")
+abline(h=c(0,1),lty=2)
+```
+
+### MODEL LOGIT
+
+```{r}
+m2<-glm(cbind(DIED,T-DIED)~log(DOSE),family=binomial(link="logit"),data=insect)
+summary(m2)
+```
+Veiem que l'AIC ajustant aquest model és menor que ajustant amb el model probit. A més, la distància entre el model logit i el millor model és de 6.65, per tant, tambñe és menor que la trobada amb el model probit. Veiem que és millor fer un GML amb logit que amb probit.
+
+Calculem l'estadístic de Pearson i fem l'anàlisi de residus:
+```{r}
+PS<-sum(residuals(m2,type="pearson")^2)
+PS/m2$df.res
+```
+```{r}
+residualPlot(m2,smooth=F)
+```
+```{r}
+plot(log(insect$DOSE),insect$DIED/insect$T)
+lines(log(insect$DOSE),predict(m2,type="response"))
+```
+```{r}
+plot(log(insect$DOSE),resid(m2,type="pearson"))
+abline(h=0,lty=2)
+```
+
+El model sembla bo.
+
+### MODEL CLOGLOG
+
+```{r}
+m3<-glm(cbind(DIED,T-DIED)~log(DOSE),family=binomial(link="cloglog"),data=insect)
+summary(m3)
+```
+Veiem que l'AIC i la distància entre aquest model i el millor són més grans; per tant, aquest model és pitjor que els de logit i el de probit.
+
+Calculem l'estadístic de Pearson i fem l'anàlisi de residus:
+```{r}
+PS<-sum(residuals(m3,type="pearson")^2)
+PS/m3$df.residual
+```
+Veiem que l'estadístic és molt més gran de 1: tenim un cas de sobredispersió.
+
+```{r}
+sum(residuals(m3,type="deviance")^2)/m3$df.residual
+```
+```{r}
+residualPlot(m3,smooth=F)
+```
+```{r}
+plot(log(insect$DOSE),insect$DIED/insect$T)
+lines(log(insect$DOSE),predict(m3,type="response"))
+```
+
+Veiem que el model s'ajusta poc a les dades.
+
+```{r}
+plot(log(insect$DOSE),resid(m3,type="pearson"))
+abline(h=0,lty=2)
+```
+
+## COMPARACIÓ DELS MODELS GML
+
+Comparem les seves deviances:
+```{r}
+m1$deviance
+m2$deviance
+m3$deviance
+```
+Veiem que el model amb menys deviança és l'ajustat amb el model logit.
+
+Calculem la relació entre la deviança i l'aqjust dels residus dels models:
+```{r}
+m1$deviance/m1$df.residual
+m2$deviance/m2$df.residual
+m3$deviance/m3$df.residual
+```
+Tornem a veure que el millor model és el logit.
+
+Calculem els logarítmes del Lik dels models:
+```{r}
+logLik(m1)
+logLik(m2)
+logLik(m3)
+```
+Veiem que el que té un log Lik superior és el model ajustat amb logit.
+
+Calculem com de bona és la distribució dels coeficients:
+```{r}
+1-m1$deviance/m1$null.deviance
+1-m2$deviance/m2$null.deviance
+1-m3$deviance/m3$null.deviance
+```
+Concluïm que el millor model per a l'exercici és un GML ajustat amb la funció logit.

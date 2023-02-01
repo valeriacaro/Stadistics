@@ -1,0 +1,174 @@
+---
+title: "Colesterol"
+author: "Valèria Caro"
+date: "11/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+setwd("~/Dades/Segon/PiE2/Estadistica")
+library(survival)
+library(Formula)
+library(colorspace)
+library(ggplot2)
+library(carData)
+library(Hmisc)
+library(car)
+library(tables)
+library(lattice)
+library(grid)
+library(gridExtra)
+library(MASS)
+library(latticeExtra)
+library(RColorBrewer)
+library(multcompView)
+library(mvtnorm)
+library(TH.data)
+```
+
+## INTRODUCCIÓ
+
+Llegim les dades i fem estadística descriptiva:
+```{r}
+dadescol <- read.csv2("col.csv")
+head(dadescol)
+```
+```{r}
+dim(dadescol)
+```
+Amb això veiem que, a 100 joves, se'ls hi ha mesurat el nivell de colesterol juntament amb l'edat, l'alçada i el pes.
+
+El nostre sentit comú ens diu que la primera variable que pot afectar el colesterol és el pes. Fem un model de **regressió lineal simple** que tingui el pes com a explicativa.
+
+Prèviament, visualitzem les dades amb el que s'anomena "diagrama de dispersió" o "scatterplot"; mirem el nivell de colesterol en funció del pes dels joves:
+```{r}
+scatterplot(dadescol$P, dadescol$C, smooth = F)
+```
+
+Contràriament al que havíem pensat, sembla que el colesterol és més baix per a persones de pes mel elevat: el pendent de la recta és negatiu.
+
+Mirant els boxplots veiem que hi ha una persona amb un valor de colesterol molt més elevat que la resta: valor "outlier" al boxplot vertical.
+
+## AJUSTEM EL PRIMER MODEL: REGRESSIÓ LINEAL SIMPLE
+
+La funció lm() s'utilitza per a fer models lineals. Es pot utilitzar per dur a terme regressió, anàlisi de variància d'un sol estrat i anàlisi de covariància. Normalment l'utilitzarem aplicant expressions com: dadescolC~dadescolP. Si volguéssim ometre la intercepció entre les variables, posaríem dadescolC~dadescolP-1.
+
+```{r}
+model1<-lm(dadescol$C~dadescol$P)
+summary(model1)
+```
+Observem el següent:
+
+1. Els dos coeficients són estadísticament diferents de zero (els t-valors es troben fora l'interval (-2, 2)).
+
+2. Sembla que hi ha residus força grans (tenint en compte la magnitud de la variable).
+
+3. El coeficient de determinació (R²) és molt petit, indicant que queda molta variabilitat en la variable colesterol que no explica el pes de les persones; el colesterol depèn de més variables i el pes no és una molt significativa i que expliqui molt el valor del colesterol. El pes explica només un 28% de la variabilitat entre els nivells de colesterol.
+
+4. Basant-nos en el test F (estadístic F és gran), veiem que el model de regressió lineal simple és millor que el model nul, per tant hi ha una part de la variabilitat del colesterol que ve explicada perquè els individus tenen diferent pes.
+
+A continuació, mirem si es compleixen les hipòtesis del model lineal (fem servir els quatre plors que fa l'R per defecte quan li especifiques un model):
+
+```{r}
+oldpar <- par(mfrow = c(2,2))
+plot(model1, ask = F)
+```
+
+```{r}
+par(oldpar)
+```
+
+D'aquestes gràfiques, podem dir que la hipòtesi d'homocedasticitat no es veu massa clara. La Normalitat dels residus és força clara i no veiem valors amb "laverage" ni distància de Cook grans.
+
+L'homocedasticitat és una característica d'un model de regressió lineal que implica que la variància dels errors és constant al llarg del temps. Per a que es doni, hauríem de veure la línea vermella centrada en el zero i totalment horitzontal.
+
+A l'última gràfica tenum els residus estandaritzats juntament amb les línees horitzontals a -2, 0 i 2 per veure quants cauen fora de l'interval (-2, 2) (si el model és apropiat n'hi ha d'haver aproximadament un 5%). Veiem que hi ha 5 residus fora de l'interval i, tenint 100 dades, això és exactament un 5%.
+
+Per veure com afecten les altres variables al nivell de colesterol, portem a terme un plot de dispersió del colesterol com a funció del pes, però separant els individus per grups d'edat:
+
+```{r}
+sp(dadescol$C ~ dadescol$P|dadescol$E, smooth = F, col = 1:20, data = dadescol)
+```
+
+Ara les coses canvien: si agrupem els individus per edats, sí que veiem que el nivell de colesterol semble més
+alt per les persones de més pes per a aquella determinada edat. El com augmenta dependrà de l’edat. Per tant doncs, cal tenir en compte
+com a mínim també la variable edat en el model.
+
+## AJUSTEM DIVERSOS MODELS DE REGRESSIÓ LINEAL MÚLTIPLE
+
+Comencem visualitzant les dades:
+```{r}
+scatterplotMatrix(dadescol, diagonal = F, smooth = F)
+```
+
+Veiem que pes i alçada estan linealment relacionades (les gràfiques en posicions (1,2) i (2,1) presenten rectes "perfectes"), i probablement només en podrem posar una perquè, sinó, tindrem problemes de multicolinealitat. La multicol·linealitat és un problema que sorgeix quan les variables explicatives del model estan altament correlacionades entre si. Aquest és un problema complex, perquè en qualsevol regressió les variables explicatives presentaran algun grau de correlació. 
+
+Ajustem el model amb totes les explicatives que tenim:
+```{r}
+model2 <- lm(dadescol$C~dadescol$H+dadescol$P+dadescol$E)
+summary(model2)
+```
+Podem treure les següents conclusions:
+
+1. Ara el model ha passat a explicar el 74% de la variabilitat que hi ha en la variable colesterol. Si mirem el R² adj, veiem que és superior a l'obtingut en el model1 i, per tant, val la pena modelar amb més paràmetres.
+
+2. Mirant les estimacions des paràmetres, veiem que l'alçada i el pes són totes dues estadísticament significatives perquè els seus coeficients són estadísticament diferents de zero. Encara que estiguin linealment relacionades, cadascuna explica una part de la variabilitat del colesterol. A l'augmentar el pes en una unitat, per a la mateixa edat i alçada, augmenta el nivell de colesterol en 10.37 unitats. En augmentar l'alçada una unitat, per al mateix pes i la mateixa edat, disminueix el colesterol en 5.09 unitats.
+
+3. Al augmentar l'edat de la persona en una unitat, per al mateix pes i alçada, disminueix el nivell de colesterol en 13 unitats.
+
+4. L'estimació de la variància és de 30.11² (magnitud de l'error de les prediccions).
+
+5. En aquest model no estem permetent que el pendent de la recta que ens modela el nivell de colesterol varii en funció de l'edat (és a dir, no estem agrupant per edats). Si ho volguéssim, hauríem d'afegir el terme associat a la interacció.
+
+6. Rebutgem la hipòtesi nul·la del test òmnibus, per tant el nostre model és millor que el nul.
+
+Ara, printem la taula ANOVA:
+```{r}
+anova(model2)
+```
+En aquesta taula, veiem quina part de la variabilitat total és explicada per a cadascuna de les variables. Com que tenen els mateixos graus de llibertat, podem dir que la que captura més variabilitat és l'alçada, després el pes i finalment l'edat.
+
+Calculem els VIF ("variance inflation factors"):
+```{r}
+vif(model2)
+```
+Clarament surten alts, això es deu a que les explicatives estan linealment relacionades. Si en suprimim una, però, perdrem bondat d'ajust perquè els coeficients de les tres variables són estadísticament diferents de zero.
+
+Per tal de millorar el model, en aquest cas, podem considerar l'excés de pes, enlloc de la variable pes.
+
+Se sap que el pes d'una persona en funció de la seva alçada ve donat per:
+
+$$
+W^* = -10 + 0.5H
+$$
+Llavors, l'excés de pes és:
+
+$$
+EW = W - W^*
+$$
+Modelem el colesterol en funció d'aquesta variable enlloc de la del pes:
+```{r}
+# Definim la variable
+dadescol$EP <- dadescol$P-(-10+0.5*dadescol$H)
+model3 <- lm(dadescol$C~dadescol$H+dadescol$EP+dadescol$E)
+summary(model3)
+```
+Observem que l'alçada ara sí que és estadísticament igual a zero; la podem treure:
+```{r}
+model4 <- lm(dadescol$C~dadescol$EP+dadescol$E)
+summary(model4)
+```
+Fem gràfiques del model:
+```{r}
+plot(model4, ask = F)
+```
+
+Calculem el VIF:
+```{r}
+vif(model4)
+```
+No veiem evidències que les hipòtesis del model lineal no es compleixin i donem per bo aquest últim model.
+
+Ara no tenim multicolinealitat ja que tots els VIF tenen un valor petit.
+
+Tenim els mateixos valors per R² i l'error estàndard que en el model 3.

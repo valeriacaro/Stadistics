@@ -1,0 +1,128 @@
+---
+title: "Pedagogical"
+author: "Valèria Caro"
+date: "11/12/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+setwd("~/Dades/Segon/PiE2/Estadistica")
+library(survival)
+library(Formula)
+library(colorspace)
+library(ggplot2)
+library(carData)
+library(Hmisc)
+library(car)
+library(tables)
+library(lattice)
+library(grid)
+library(gridExtra)
+library(MASS)
+library(latticeExtra)
+library(RColorBrewer)
+library(multcompView)
+library(mvtnorm)
+library(emmeans)
+library(RcmdrMisc)
+library(multcomp)
+pedagogical<-read.csv2("comrect.csv")
+```
+
+## INTRODUCCIÓ
+
+En aquesta pràctica realitzarem un test ANCOVA (Model ANOVA amb interacció). Farem la següent parametrització:
+
+$$
+y_{ij} = \mu + \tau_i + \beta c_{ij} + \gamma_i c_{ij} + e_{ij}
+$$
+On $\tau_1 = 0$, $\gamma_1 = 0$, i en [1,2]. Aquesta parametrització té quatre paràmetres.
+
+```{r}
+head(pedagogical)
+```
+```{r}
+dim(pedagogical)
+```
+Tenim 22 individus i per a cadascun d'ells 4 informacions. La primera correspon amb el mètode pedagògic que ha seguit l'estudiant (1 o 2). La segona ens dóna el coeficient intelectual de l'estudiant. La tercera i la quarta són les puntuacions que l'estudiant ha tret en dos tests diferents. De moment només treballarem amb la puntuació V.
+
+Llavors, pel que fa a la parametrització tindrem:
+
+- Pels estudiants del primer mètode:
+
+$$
+y_{1j} = \mu + \beta c_{1j} + e_{1j}
+$$
+
+- Pels estudiants del segon mètode:
+
+$$
+y_{2j} = (\mu + \tau_2) + (\beta + \gamma_2) c_{2j} + e_{2j}
+$$
+Mirant si $\tau_2 = 0$ o no, estarem mirant  si el mètode d'ensenyament afecta o no en la puntuació de dues persones amb el mateix coeficient intel·lectual.
+
+## ESTADÍSTICA DESCRIPTIVA
+
+Fem una gràfica de la puntuació en funció del coeficient intel·lectual, utilitzant diferents línies per a cada mètode pedagògic:
+```{r}
+sp(V~C|M, smooth = F, data = pedagogical)
+# Fem unes ratlles verticals als valors 90, 105 i 120 de coeficient
+abline(v = c(90, 105, 120), lty = 2, col = "blue")
+```
+
+Sembla que, independentment del mètode, com més coeficient intel·lectual té l'estudiant, més alta és la seva puntuació (les rectes tenen el mateix pendent). Sembla que el mètode 2 és més eficient que el primer. També veiem que tenim més dades del segon grup que del primer. D'altra banda, els mètodes donen resultats baixos per coeficients intel·lectuals baixos i resultats alts per coeficients alts. Sembla que estudiar amb el mètode 2 és igual d'eficient que el mètode 1 + $\hat{\tau_2}$.
+
+## MODEL AMB INTERACCIÓ
+
+Comencem a ajustar un model amb interacció. Això vol dir que permetem que la influència del coeficient d'intel·ligència en la putuació sigui diferent per als dos mètodes. Si el terme d'interacció és significatiu, això vol dir que els dos pendents són estadísticament diferents i que el coeficient d'intel·ligència afecta de manera diferent en la puntuació dels dos mètodes. 
+
+```{r}
+# V~M+C+M:C (efectes principals + interacció) equivalent a V~M*C
+mP <- lm(V~M+C+M:C, pedagogical)
+summary(mP)
+```
+Sembla que la interacció i el mètode no són estadísticament significatius; segurament el mètode surt que no ho és a causa de la interacció.
+
+El model ajusta prou bé (R²=96%) i és millor que el model nul (F gran).
+
+Fent un ANOVA de tipus III mirem si el mètode és significatiu o no:
+```{r}
+Anova(mP, ty=3)
+```
+Veiem que la interacció i el mètode no són significatius. Fem un altre model treient la interacció i mirem què passa.
+
+## MODEL ADDITIU (SENSE INTERACCIÓ)
+
+```{r}
+mP2 <- lm(V~M+C, pedagogical)
+summary(mP2)
+```
+Ara veiem que el mètode sí que és significatiu, així com també ho és el coeficient.
+
+Veiem que, per a un mateix coeficient intel·lectual, estudiar amb el mètode 2 provoca una puntuació de 14.64 unitats més que l'esperada estudiant amb el mètode 1. I, per a un mateix mètode, una unitat més en el coeficient intel·lectual propociona una puntuació de 1.22 unitats més. Amb aquestes dues variables expliquem en un 96% la variabilitat de la puntuació en l'examen.
+
+```{r}
+Anova(mP2, ty = 3)
+```
+Veiem que les variables tenen influència significativa també en la puntuació.
+
+Mirem si les hipòtesis del model lineal es compleixen.
+
+## DIAGNÒSTIC DEL MODEL
+```{r}
+plot(fitted(mP2), resid(mP2))
+abline(h=0, lty=2)
+```
+```{r}
+oldpar <-par(mfrow = c(2,2))
+plot(mP2, ask=F)
+```
+
+Les hipòtesis de Normalitat, independència i homocedasticitat es podrien acceptar i, per tant, podríem donar el model per bo.
+
+Si volem el valor esperat de la puntuació per coeficients de 90, 105 i 120 fem el següent:
+```{r}
+emm2 <- emmeans(mP2, ~M|C, at=list(C=c(90,105,120)))
+emm2
+```
+Veiem que, en tots els casos, estudiar amb el mètode 2 garanteix una puntuació més alta.

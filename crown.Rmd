@@ -1,0 +1,194 @@
+---
+title: "Crown"
+author: "Valèria Caro"
+date: "3/12/2021"
+output: html_document
+---
+
+## INTRODUCCIÓ
+
+Carreguem les llibreries i les dades:
+
+```{r}
+setwd("~/Dades/Segon/PiE2/Estadistica")
+library(survival)
+library(Formula)
+library(colorspace)
+library(ggplot2)
+library(carData)
+library(Hmisc)
+library(car)
+library(tables)
+library(lattice)
+library(grid)
+library(gridExtra)
+library(MASS)
+library(latticeExtra)
+library(RColorBrewer)
+library(multcompView)
+library(mvtnorm)
+library(emmeans)
+library(RcmdrMisc)
+library(multcomp)
+crown <-read.csv2("dcap.csv")
+```
+```{r}
+dim(crown)
+```
+Veiem que, en total, hem considerat 311 arbres. A més, veiem que, per a cada arbre, s'han pres 5 mesures diferents en metres.
+
+Per a evitar problemes de multicolinearitat, tal com es suggereix en l'enunciat de l'exercici, en comptes de les variables PB (perímetre de la base) i PT (perímetre del tronc), considerarem el radi entre ells. Definirem la variable i l'inclourem dins el conjunt de dades:
+
+```{r}
+attach(crown)
+RP <- PB/PT
+crown$RP <- crown$PB/crown$PT
+```
+Fem un gràfic per veure què està passant:
+```{r}
+scatterplotMatrix(crown, smooth=F,diagonal=F)
+```
+
+Clarament observem que les variables PB i PT estan linealment relacionades. Per evitar el problema de multicolinearitat que això pot suposar, podríem decidir treure'n una, o considerar només el radi entre elles RT. Aquesta segona opció dóna millors resultats que els que es donen quan en treiem una; per això utilitzarem la variable RT.
+
+## MODELS A CONSIDERAR
+
+### MODEL A
+
+$$
+D_{crown} = \beta_0 + \beta_1PT + \beta_2RP + \beta_3HT + \beta_4A + e
+$$
+### MODEL B
+
+$$
+D_{crown} = \beta_0 + \beta_1LPT + \beta_2LRP + \beta_3LHT + \beta_4LA + e
+$$
+Observació: tenir en compte els logaritmes a ambdós costats del model és convenient quan els efectes de les variables explicatives a la variable resposta en lloc de ser additius són multiplicatius. 
+
+Definim els logarítmes de les variables:
+```{r}
+crown$LDCap <- log(crown$DCap)
+crown$LRP <- log(crown$RP)
+crown$LPT <- log(crown$PT)
+crown$LHT <- log(crown$HT)
+crown$LE <- log(crown$E)
+head(crown)
+```
+
+## APLICACIÓ MODEL A
+
+```{r}
+modA <- lm(crown$DCap~crown$PT+crown$RP+crown$HT+crown$E, crown)
+summary(modA)
+```
+Veiem que les variables RP i HT no són estadísticament significatives.
+
+## ANÀLISI DE RESIDUS DEL MODEL A
+
+```{r}
+plot(predict(modA),resid(modA),pch=3)
+abline(h=0,lty=2)
+```
+```{r}
+plot(modA,ask=F)
+```
+```{r}
+plot(rstudent(modA),pch=3)
+abline(h=c(-3,-2,0,2,3),lty=2)
+```
+
+Les principals conclusions del model A són:
+
+1. El mínim residu és -2.48 i el màxim 3.47.
+
+2. Dues variables explicatives no són estadísticament significatives: RP i HT.
+
+3. L'estimació de la desviació estàndard és 0.7213 i R² = 0.81. El model explica un 81% de la variabilitat de la variable Dcap. El test omnibus diu que el model és significativament diferent de zero.
+
+4. Mirant als residus deduïm:
+
+- L'hipòtesi d'homocedasticitat no es verifica, ja que en la gràfica de residus vs fitted veiem que quan el valor estimat és gran, la variància del residu és major que per a valors estimats petits. (No és constant)
+
+- La Normalitat no és molt clara perquè els punts es corben molt en els extrems.
+
+- La gràfica scale-location ensenya una tendència a créixer que no hauria d'aparèixer.
+
+- Respecte a la distància de Cook, tots els valors són molt petits. No sembla que hi hagi valors influents.
+
+- Els valors laverage també són baixos.
+
+- Hi ha 16 residus studientized que no pertanyen a (-1.96, 1.96). Això és un 5% de les dades, com hauria de ser.
+
+## MODEL A SENSE LA VARIABLE HT
+
+```{r}
+modAbis<-lm(crown$DCap~crown$PT+crown$RP+crown$E, crown)
+summary(modAbis)
+```
+A partir del resum i comparant amb el model A, veiem que els residus oscil·len de manera semblant, i que l'estimació de la desviació estàndard i els valors per R² són molt semblants. Ara, la variable RP està en el límit de ser significativa o no, perquè el seu valor p és igual a 0,05. Si els residus es veuen bé en el sentit que verifiquen la hipòtesi del model lineal, aquest model serà millor que el model A perquè és més senzill. Amb menys paràmetres tenim un ajust similar. 
+
+## ANÀLISI DE RESIDUS DEL MODEL A BIS
+
+```{r}
+plot(predict(modAbis),resid(modAbis),pch=3)
+abline(h=0,lty=2)
+```
+
+```{r}
+plot(modAbis,ask=F)
+```
+```{r}
+plot(rstudent(modAbis),pch=3)
+abline(h=c(-3,-2,0,2,3),lty=2)
+```
+
+Veiem que les hipòtesis del model lineal segueixen sense complir-se; veiem els mateixos comportaments que abans. Caldrà fer un altre model.
+
+## APLICACIÓ MODEL B
+
+```{r}
+modB<-lm(crown$LDCap~crown$LPT+crown$LRP+crown$LHT+crown$LE, crown)
+modB<-lm(LDCap~LPT+LRP+LHT+LE, crown)
+summary(modB)
+```
+D'aquest model treiem les següents conclusions:
+
+1. Totes les variables explicatives són estadísticament significatives.
+
+2. Els residus mínim i màxim són més pròxims a zero que en el cas del model A.
+
+3. L'estimació de la desviació estàndard és més baixa i els valors de R² són superiors que abans.
+
+4. El test omnibus diu que aquest model, en general, explica una gran part de la variabilitat de la variable Dcap.
+
+Fem l'anàlisi de residus.
+
+## ANÀLISI DE RESIDUS DEL MODEL B
+
+```{r}
+plot(predict(modB),resid(modB),pch=3)
+abline(h=0,lty=2)
+```
+
+```{r}
+plot(modB,ask=F)
+```
+
+```{r}
+plot(rstudent(modB),pch=3)
+abline(h=c(-3,-2,0,2,3),lty=2)
+```
+
+Veiem que podem acceptar l'hipòtesi d'homocedasticitat, la de Normalitat (el qq-plot és prou lineal) i no observem patrons. Menys del 5% dels valors es troben fora l'interval (-1.96, 1.96). Concluïm que el model B és apropiat.
+
+## NOVES PREDICCIONS A PARTIR DEL MODEL B
+
+Primer obtindrem prediccions pel logarítme i, després, per la variable:
+```{r}
+newdata<-data.frame(LPT=log(c(0.4,0.64)),LRP=log(c(0.6,0.9)/c(0.4,0.64)),LHT=log(c(2.3,2.8)),LE=log(10))
+predict(modB, newdata, interval="prediction",level=0.95)
+```
+```{r}
+exp( predict(modB, newdata, interval="prediction",level=0.95) )
+```
+La predicció és que, per un arbre de 10 anys, amb PT igual a 0.4, PB de 0.6 i HT de 2.3, el diàmetre del seu cap serà de 3.7648 metres. Podem dir que el 95% dels arbres amb aquestes característiques tindran un cap que pertanyi a l'interval (2.84, 4.98).

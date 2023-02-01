@@ -1,0 +1,269 @@
+---
+title: "EngreixGarrins"
+author: "Valèria"
+date: "19/11/2021"
+output: html_document
+---
+
+## INTRODUCCIÓ
+
+Aquest exercici té per objectiu estudiar l'engreix mig dels Garrins en funció de la dosi d'edulcorant que hi ha a la seva dieta. S'han considerat cinc dosis. Les unitats experimentals són els garrins, i cada dosi s'ha administrat a un total de cinc garrins durant uns quants dies i se n'ha mesurat l'engeix mig de cadascun d'ells.
+
+En aquest exercici hi ha una única variable explicativa que és categòrica (factor), per tant el model lineal associat és dels que anomenem model ONE-WAY ANOVA ("One factor Analysis of variance").
+
+Establim el directori de treball i carreguem els paquets:
+
+```{r}
+setwd("~/Dades/Segon/PiE2/Estadistica")
+library(survival)
+library(Formula)
+library(colorspace)
+library(ggplot2)
+library(carData)
+library(Hmisc)
+library(car)
+library(tables)
+library(lattice)
+library(grid)
+library(gridExtra)
+library(MASS)
+library(latticeExtra)
+library(RColorBrewer)
+library(multcompView)
+library(mvtnorm)
+library(emmeans)
+library(RcmdrMisc)
+library(multcomp)
+adg<-read.csv2("gmd.csv")
+(adg)
+```
+Cada fila correspon a un garrí diferent. De cada garrí tenim el tipus de dieta que ha seguit (variable categòrica) i el valor del guany mitjà del pes.
+
+```{r}
+dim(adg)
+```
+Per tal que consideri la variable “Dosi” com un factor, l’hem de definit com a tal, perquè sino la prendrà com a numèrica. Ho fem a continuació, i afegim la nova columna en el “dataset”
+
+```{r}
+# Afegim una nova variable, un factor. Volem que ho miri com etiquetes.
+adg$dosifactor<-as.factor(adg$DOSI)
+head(adg)
+```
+## ESTADÍSTICA DESCRIPTIVA DE LES DADES
+
+```{r}
+# Per cada nivell de la categòrica tinc el seu boxplot
+boxplot(adg$GMD~adg$dosifactor)
+```
+La línia més negra és la mediana de cada mostra. Sembla que la primera i segona dieta són estadísticament equivalents, igual que les dues últimes. Veiem més salt entre la segona i la tercera. Segurament rebutjarem l'hipòtesi que totes les mitjanes són iguals.
+
+Sembla que no hi ha d’haver diferències entre el pes guanyat pels darrins de les dues primeres dosis, però que aquest pes sí és diferent pel pes guanyat amb les altres dosis. Les tres dosis altes d’edulcorant semblen donar resultats d’engreix semblants. La dosi sense edulcorant sembla que té una variabilitat menor que les altres (tenim però només 5 dades en cada grup i això és poc).
+
+Dibuixem les mitjanes amb els seus intervals de confiança (com fer estadística uniparamètrica amb les observacions de cada nivell):
+
+```{r}
+# Per cada mitjana també volem l'interval de confiança amb nivell 0.95 i les connectem
+with(adg, plotMeans(GMD, dosifactor, error.bars="conf.int",level=0.95, connect=TRUE))
+```
+Aquí tenim representades les mitjanes del guany diari respecte el factor de dosi. Les línies son l'interval de confiança del punt negre (la mitjana). Les veiem connectades. Veiem que on hi ha més salt és entre la 2 i la 3. La dieta 2 és el nivell que dóna més variabilitat, ja que l'interval de confiança té una longitud més gran que els altres (hi ha garrins que amb aquesta dosi de sucre s'engreixen molt i altres que molt poc).
+
+Presentem les dades en forma de taula:
+```{r}
+# Conta quantes observacions hi ha a cada fila: n = 1
+tabular(dosifactor~GMD*((n=1)+mean+sd),adg)
+```
+Veiem que, clarament, la dieta amb més variança és la segona.
+
+## Apartat a)
+
+(Falta afegir les matrius)
+
+### MODEL 1
+
+Sigui:
+$$
+i = nivell(dosis), (0,4)
+$$
+$$
+j = observacio, (0,4)
+$$
+Definim:
+$$
+y_{ij} = \mu_i + e_{ij}
+$$
+on $y_{ij} \sim N(\mu_i, \sigma^2)$.
+
+Inconvenient: Aquesta parametrització no ens permet comparar les $\mu_i$.
+
+### MODEL 2
+
+Definim:
+
+$$
+y_{ij} = \mu + \alpha_i + e_{ij}
+$$
+On $\mu$ és el guany esperat d'un garrí qualsevol a la granja i $\alpha_i$ és una petita perturbació respecte la $\mu$ general que ve determinada segons la dieta.
+
+- Si no imposem res tenim multipolinearitat (estem sobreestimant)
+
+- Si imposem $\sum_{i=0}^4{\alpha_i} = 0$, tenim $\alpha_0 = -\alpha_1 -\alpha_2 -\alpha_3 -\alpha_4$. Llavors, podem treure files a les matrius del sistema.
+
+Amb aquesta parametrització,
+
+- $\hat{\mu}$ és el guany mig diari d'un garrí si no es coneix la seva dieta (mitjana aritmètica de tota la taula).
+
+- $\hat{\alpha_i}$ és la discrepància del guany mig diari d'un garrí de la dieta i-èssima respecte al guany si no es coneix la seva dieta. (mitjana de la fila i - mitjana de tota la taula)
+
+Però comparar 2 a 2 no és tan òptim com mirant les 5 mostres com a grup.
+
+### MODEL 3
+
+Assumim $\alpha_1 = 0$ (és la parametrització que fa R per defecte).
+
+Amb aquesta parametrització,
+
+- $\hat{\mu}$ és el guany mig diari estimat de la primera dieta (mitjana de la primera fila).
+
+- $\hat{\alpha_i}$, per i en [1,4], és la discrepància del guany mig diari de la dieta i respecte la dieta 1 (mitjana de la fila i - mitjana de la primera fila).
+
+En aquest cas, la dieta 1 és el nivell de referència ("base line").
+
+En el cas de les dietes, també cal veure que, com que la dieta 1 és sense sucre i les altres són innovacions respecte aquesta, és la parametrització que té més sentit.
+
+Per a la variància utilitzem totes les dades:
+
+$$
+\hat{\sigma²} = MSE = \frac{(n_1-1)S_1^2+...+(n_5-1)S_5^2}{n_1+...+n_5-5}
+$$
+Si tinguéssim només dos nivells, l'ANOVA coincidiria amb el t-test.
+
+## Apartat b)
+
+El que volem contrastar és si l’engreix mig esperat depèn del tipus de dieta del garrí o no.
+
+En la parametrització (1) de l'apartat (a), això equival a fer el test d'hipòtesis:
+
+_- H_0: $\mu_1 = \mu_2 = ... = \mu_5$_
+
+_-H_a: almenys dues mitjanes diferents_
+
+En les parametritzacions (2) i (3) de l'apartat (a), això equival a fer el test d'hipòtesis:
+
+_- H_0: $\alpha_i per tot i \epsilon {1,2,3,4,5}$_
+
+_-H_a: almenys algun $\alpha_i diferent a 0_
+
+Si rebutgem la hipòtesi nul.la, vol dir que concluim que les dades ens porten a afirmar que hi ha diferències entre el pes mitjà esperat d’un garrí en funció del nivell d’edulcorant que tingui la seva dieta.
+
+# Apartat c)
+
+Ajustem un model lineal amb una única variable explicativa que és el tipus de dieta. Si no diem res, l’R agafa per defecta la parametrització (3) de l’apartat (a). Aquesta parametrització pren com a nivell de referència (“baseline”) el primer nivell. En aquest cas és el que té sentit fer, atès que aquest és el nivell corresponent a
+la dosi sense edulcorant. Fem el resum del model i li diem que ens printi la matriu associada.
+
+```{r}
+modeladg<-lm(adg$GMD ~adg$dosifactor)
+summary(modeladg)
+```
+Els residus sempre són "observed" - "predicted":
+
+$e_{i,j} = y_{i,j} - \hat{y}_{i,j}$
+
+La predicció és sempre la mateixa independentment de la parametrització que estem utilitzant per ajustar el model; és la que té més sentit.
+
+Els residus haurien d'estar centrats en el 0; hi és a prop per l'esquerra. Com que la mediana dels residus és negativa vol dir que estem sobrepredint una mica.
+
+Ens ha resolt el model prenent $\alpha_1 = 0$.
+
+Podem deduïr que en la mitjana del nivell 1 i del nivell 2 no hi ha diferències significatives. Podem dir que la mitjana del nivell 2 i la del nivell 1 és igual.
+Veiem que el tercer sí que és diferent del primer, igual que el quart i el cinquè.
+
+Ens agradaria saber si el quart i el cinquè són iguals, però de moment no ho podem determinar perquè estem comparant a tothom amb el nivell 1. Com que els coeficients són tots positius, els nivells 3, 4 i 5 produeixen un engreix respecte el nivell 1.
+
+La diferència del guany de pes d'un garrí entre la dieta 1 i la dieta 4 és de 34,7 unitats més.
+
+L'error de predicció és el residual standard error. L'error de predicció és de +-8,95 unitats de pes.
+
+El 78% de les diferències en l'engreix del garrí venen explicades per la dieta (Multiple R-Squared).
+
+Veiem que si ho fessim amb el model nul no tindríem un resultat tan bo.
+
+Obtenim la matriu que ha utilitzat el model per ajustar les dades:
+```{r}
+model.matrix(modeladg)
+```
+Anem a predir el guany mitjà per a cada dieta.
+
+Calcularem els intervals de confiança, però de forma similar es poden calcular els intervals de predicció.
+Observar que les prediccions puntuals correponen a la mitjana aritmètica del guany de pes de cada grup.
+```{r}
+predict(modeladg, interval = "confidence")
+```
+L'estimació de la variància ara ja s'ha fet amb tota la taula.
+
+Abans de seguir treballant amb aquest model, veiem a través de l’anàlisi dels residus si es compleixen les hipòtesis del model lineal: Normalitat, independència, esperança zero i igualtat de variàncies dels residus.
+```{r}
+plot(modeladg, ask=F)
+```
+
+Si volem que ens faci els quatre dibuixos més petits i de forma compacte tenim l’opció següents:
+```{r}
+oldpar<-par(mfrow=c(2,2))
+plot(modeladg, ask=F)
+```
+```{r}
+par(oldpar)
+```
+
+De moment, encara no hem vist que la quarta i la cinquena dieta són iguals. Ens agradaria comparar per parelles les dietes per veure on són les diferències.
+
+Calculem les estimacions de les mitjanes marginals (“estimated marginal means (emm)”); mitjanes per files:
+```{r}
+emm<-emmeans(modeladg,~ dosifactor)
+emm
+```
+Ara comparem les mitjanes per parelles utilitzant el mètode de Tukey:
+```{r}
+pairs(emm)
+```
+Veiem que els 3 últims nivells són estadísticament equivalents (P-valor diferents a 0).
+
+```{r}
+confint(emm, level=0.99)
+```
+Agrupa per les que són estadísticament equivalents (grup 1: dieta 1, dieta 2; grup 2: dieta 3, dieta 4, dieta 5).
+
+```{r}
+cld(emm, alpha=0.05)
+```
+Clarament veiem que les dues primeres dosis no són estadísticament diferents, i que les tres darreres dosis tampoc ho son. Per tant en quan a l’engreix dels garrins, podem dir que no hi ha diferències estadísticament significatives entre les dues primeres dosis i tampoc entre les tres darreres dosis.
+
+Hem tornat a calcular els intervals de confiança i aquests son més amples que els anteriors perquè hem
+augmentat la confiança i hem demanat que sigui del 99%.
+
+Ara presentarem aquests resultats de forma compacte, agrupant amb la mateixa lletra els nivells del factor que son estadísticament equivalents. Farem servir la comanda “CLD” que vol dir “compact letter display”.
+Ara cal repetir l’ajust del model assumint la parametrització del punt (1) de l’partat (a):
+```{r}
+modeladg2<-lm(adg$GMD ~adg$dosifactor-1)
+summary(modeladg2)
+```
+```{r}
+model.matrix(modeladg2)
+```
+
+## MÈTODE DE TUKEY
+
+El mètode de Tukey serveix per comparar mitjanes 2 a 2 en un ANOVA. Segueix els següents passos:
+
+1. Ordenem de petites a grans les mitjanes:
+$\hat{y}_1$, $\hat{y}_2$, ..., $\hat{y}_a$.
+
+2. Estimem la variància d'una de les mitjanes: $S_{\hat{y_{(k)}}}^2 = \frac{\hat{\sigma^2}}{n} = \frac{MSE}{n}$. Aquesta predicció va bé si tenim el mateix nombre d'observacions a les files, però si no fos el cas hauríem d'agafar $S_{\hat{y_{(k)}}}^2 = \frac{\hat{\sigma}^2}{n_n}$ on $n_n = \frac{a}{\frac{1}{n_1}+...+\frac{1}{n_a}}$ (mitjana harmònica).
+
+3. Anem a la taula de la distribució de "Rang d'Student" i busquem el valor $q_\alpha(a, N-a)$, on N és el nombre total de valors de la taula: $N = n_1 + ... + n_a$.
+
+4. Si $|\hat{y_i} - \hat{y_j}| \geq q_\alpha(a, N-a)S_{\hat{y_{(k)}}}$ concluïm que els valors esperats dels nivells i i j són diferents.
+
+Comencem comparant els dos nivells que difereixen més (primer i últim). Si no rebutgem, ja estem i podem comparar el segon més gran amb el més petit, i anem fent.
+Si rebutgem, comparem els següents.
+
+Quan no rebutgem ja sabem quines són diferents (les comparades i les que queden superiors a la més gran per un determinat nivell).
